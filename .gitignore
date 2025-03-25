@@ -1,0 +1,21 @@
+# Ignore Python virtual environment
+venv/
+
+# Ignore compiled files
+*.pyc
+__pycache__/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore IDE and editor settings
+.vscode/
+.idea/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+output/*
+huggingface cache/*
