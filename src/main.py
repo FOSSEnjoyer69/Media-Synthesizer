@@ -6,7 +6,8 @@ import gradio as gr
 from prompt_presets import get_image_inpaint_preset_file_paths, get_image_inpaint_preset_file_names, load_prompts
 from image_inpainting import generate_inpaint_images
 from image_masking import add_mask, trim_mask, clear_mask, grow_mask, shrink_mask
-from openpose_tools import detect_poses
+from openpose_tools import detect_poses, pose_map_select
+from sam_tools import get_point_from_gradio_click, run_image_sam, MODELS as SAM_MODELS
 
 IMAGE_INPAINT_MODELS = ["Uminosachi/realisticVisionV51_v51VAE-inpainting", "Lykon/absolute-reality-1.6525-inpainting", "Uminosachi/dreamshaper_8Inpainting"]
 
@@ -20,7 +21,7 @@ def input_file_changed(new_file):
 
     is_image_mode:bool = image is not None
 
-    return gr.update(visible=is_image_mode), gr.update(value=image, visible=is_image_mode), gr.update(value=image)
+    return gr.update(visible=is_image_mode), gr.update(value=image, visible=is_image_mode), gr.update(value=image), gr.update(value=image)
 
 with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important; }") as app:
     with gr.Tab("Create"):
@@ -51,6 +52,21 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
                     image_inpaint_output_gallery = gr.Gallery()
 
                 with gr.Tab(label="Mask") as image_inpaint_mask_tab:
+                    with gr.Accordion("Segmant Anything"):
+                        with gr.Row():
+                            image_inpaint_sam_points = gr.State([])
+                            image_inpaint_sam_labels = gr.State([])
+
+                            image_inpaint_sam_map = gr.Image()
+                            image_inpaint_run_same_btn = gr.Button("Run SAM")
+                            with gr.Column():
+                                with gr.Row():
+                                    image_inpaint_sam_point_type = gr.Radio(label="point type", choices=["include", "exclude"], value="include", scale=2)
+                                    image_inpaint_clear_sam_points = gr.Button("Clear Points")
+                                    image_inpaint_sam_model = gr.Dropdown(label="SAM Model", choices=SAM_MODELS, value=SAM_MODELS[0])
+
+                            image_inpaint_sam_map.select(get_point_from_gradio_click, inputs=[image_inpaint_sam_point_type, image_inpaint_sam_points, image_inpaint_sam_labels, image_inpaint_sam_map], outputs=[image_inpaint_sam_points, image_inpaint_sam_labels, image_inpaint_sam_map], queue=False)
+                            image_inpaint_clear_sam_points.click(fn=lambda x: (x, [], []), inputs=[input_image], outputs=[image_inpaint_sam_map, image_inpaint_sam_points, image_inpaint_sam_labels])
                     with gr.Row():
                         with gr.Column():
                             composite_mask_image = gr.Sketchpad(label="Mask Composite", interactive=True)
@@ -82,7 +98,9 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
 
                             detect_poses_btn.click(detect_poses, inputs=[input_image], outputs=[composite_pose_image, pose_image, pose_joints])
 
-        input_file.change(input_file_changed, inputs=[input_file], outputs=[image_tab, input_image, composite_mask_image])
+        input_file.change(input_file_changed, inputs=[input_file], outputs=[image_tab, input_image, composite_mask_image, image_inpaint_sam_map])
+        image_inpaint_run_same_btn.click(run_image_sam, inputs=[input_image, image_inpaint_sam_model, image_inpaint_sam_points, image_inpaint_sam_labels], outputs=[composite_mask_image, mask_image])
+        
         inpaint_images_btn.click(generate_inpaint_images, inputs=[input_image, mask_image, pose_image, image_inpaint_prompt, image_inpaint_n_prompt, image_inpaint_sampling_steps, image_inpaint_cfg_scale, image_inpaint_seed, image_inpaint_iteration_count, image_inpaint_inpaint_model_id, image_inpaint_min_generation_resolution, image_inpaint_max_generation_resolution], outputs=[image_inpaint_output_gallery])
     with gr.Tab("Settings"):
         with gr.Tab("Prompts"):
