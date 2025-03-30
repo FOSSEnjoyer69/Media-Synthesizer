@@ -15,8 +15,8 @@ import cv2
 import torch
 
 import numpy as np
-from diffusers import (KDPM2AncestralDiscreteScheduler,
-                       StableDiffusionInpaintPipeline, ControlNetModel, StableDiffusionControlNetInpaintPipeline)
+from diffusers import  (KDPM2AncestralDiscreteScheduler,
+                        StableDiffusionInpaintPipeline, ControlNetModel, StableDiffusionControlNetInpaintPipeline)
 
 from save import get_output_folder
 
@@ -66,7 +66,8 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
     mask_image.save(f"{save_folder_path}/scaled_mask_image.jpg")
     pose_image.save(f"{save_folder_path}/scaled_pose_image.jpg")
 
-    openpose_controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-openpose", torch_dtype=torch.float16, cache_dir="huggingface cache")
+    #openpose_controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-openpose", torch_dtype=torch.float16, cache_dir="huggingface cache")
+    openpose_controlnet = ControlNetModel.from_pretrained("lllyasviel/control_v11p_sd15_openpose", torch_dtype=torch.float16, cache_dir="huggingface cache")
 
     # Load the Stable Diffusion inpainting model with openpose_controlnet
     pipe = StableDiffusionControlNetInpaintPipeline.from_pretrained(
@@ -80,6 +81,7 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
     # Use a specific scheduler for better quality
     pipe.scheduler = KDPM2AncestralDiscreteScheduler.from_config(pipe.scheduler.config)
     pipe.enable_model_cpu_offload()
+    pipe.enable_xformers_memory_efficient_attention()
 
     if seed == -1:
         seed = random.randint(0, 2147483647)
@@ -101,6 +103,7 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
             width=generation_width,
             height=generation_height,
             mask_image=mask_image,
+            guidance_scale=cfg_scale,
             control_image=pose_image
         ).images[0]
 

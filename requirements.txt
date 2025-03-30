@@ -1,6 +1,7 @@
+controlnet_aux==0.0.9
+diffusers==0.32.2
 gradio==5.22.0
 icecream==2.1.4
-torchvision==0.21.0
-controlnet_aux==0.0.9
 mediapipe==0.10.21
-diffusers==0.32.2
+torchvision==0.21.0
+xformers==0.0.29
