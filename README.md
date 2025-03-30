@@ -21,5 +21,4 @@ python3 src/main.py
 <ol>
   <li>Limited features</li>
   <li>Only supported Image Inpainting, i am working on more tpyes of image ediiting</li>
-  <li></li>
 </ol>
