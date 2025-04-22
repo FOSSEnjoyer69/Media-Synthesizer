@@ -18,4 +18,8 @@ logs/
 Thumbs.db
 
 output/*
+Models/Lora/*
+
 huggingface cache/*
+
+settings/prompts/presets/image inpainting/*
