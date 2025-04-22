@@ -1,7 +1,9 @@
+bitsandbytes==0.45.4
 controlnet_aux==0.0.9
 diffusers==0.32.2
 gradio==5.22.0
 icecream==2.1.4
 mediapipe==0.10.21
 torchvision==0.21.0
+peft==0.15.1
 xformers==0.0.29

@@ -23,7 +23,8 @@ from save import get_output_folder
 def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose, 
                             prompt:str="", n_prompt:str="", 
                             sampling_steps:int=40, cfg_scale:float=4, seed: int = -1, iteration_count:int=2, 
-                            inpaint_model_id: str = "Uminosachi/realisticVisionV51_v51VAE-inpainting", 
+                            inpaint_model_id: str = "Uminosachi/realisticVisionV51_v51VAE-inpainting",
+                            lora_model_paths:list=[], lora_strength:float=1,
                             min_inpaint_resolution:int=512, max_inpaint_resolution:int=1024):
     if input_mask is None:
         return [input_image] * iteration_count
@@ -47,15 +48,15 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
         file.write(f"Inpaint Resolution: {inpaint_resolution}\n")
     
     generation_padding:float = 0.5
-    image = crop_to_mask(input_image, input_mask, generation_padding)
-    mask = crop_to_mask(input_mask, input_mask, generation_padding)
-    pose = crop_to_mask(input_pose, input_mask, generation_padding)
+    image = crop_to_mask(input_image, input_mask, generation_padding, min_resolution=min_inpaint_resolution)
+    mask = crop_to_mask(input_mask, input_mask, generation_padding, min_resolution=min_inpaint_resolution)
+    pose = crop_to_mask(input_pose, input_mask, generation_padding, min_resolution=min_inpaint_resolution)
 
     top_left, bottom_right = find_image_in_large_image(input_image, image)
 
-    scaled_image = scale_image(image, inpaint_resolution, allow_upscale=False)
-    mask_image = scale_image(mask, inpaint_resolution, allow_upscale=False)
-    pose_image = scale_image(pose, inpaint_resolution, allow_upscale=False)
+    scaled_image = scale_image(image, max_inpaint_resolution, allow_upscale=False)
+    mask_image = scale_image(mask, max_inpaint_resolution, allow_upscale=False)
+    pose_image = scale_image(pose, max_inpaint_resolution, allow_upscale=False)
     
     scaled_image, mask_image, pose_image = auto_resize_to_pil([scaled_image, mask_image, pose_image])
     generation_width, generation_height = scaled_image.size
@@ -75,8 +76,11 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
         controlnet=openpose_controlnet, 
         torch_dtype=torch.float16, 
         safety_checker=None,  
-        requires_safety_checker=False, 
+        requires_safety_checker=False,
         local_files_only=False)
+
+    for lora_model_path in lora_model_paths:
+        pipe.load_lora_weights(f"Models/Lora/{lora_model_path}")
 
     # Use a specific scheduler for better quality
     pipe.scheduler = KDPM2AncestralDiscreteScheduler.from_config(pipe.scheduler.config)
@@ -99,12 +103,15 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
             negative_prompt=n_prompt,
             num_inference_steps=sampling_steps,
             generator=generator,
+            cross_attention_kwargs={"scale": lora_strength},
             image=scaled_image,
             width=generation_width,
             height=generation_height,
             mask_image=mask_image,
             guidance_scale=cfg_scale,
-            control_image=pose_image
+            control_image=pose_image,
+            
+            
         ).images[0]
 
         #output_image = fix_hands(output_image)

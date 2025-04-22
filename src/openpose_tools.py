@@ -8,7 +8,6 @@ from image_border import add_equal_image_border, remove_equal_image_border
 
 from controlnet_aux import OpenposeDetector
 from controlnet_aux.util import resize_image
-openpose:OpenposeDetector = OpenposeDetector.from_pretrained("lllyasviel/ControlNet")
 
 stickwidth:int = 4
 
@@ -149,42 +148,44 @@ def get_connected_joints(current_joint:str):
     elif current_joint == "Right Ankle":
         return "Right Knee"
 
-def get_connection_colours(joint_a_name:str, joint_b_name:str):
+def get_connection_colours(joint_a_name:str, joint_b_name:str, multiplier:float=1):
+    colour:tuple = (255, 255, 255)
+
     #Head
     if {joint_a_name, joint_b_name} == {"Neck", "Nose"}:
-        return (0, 0, 153)
+        colour = (0, 0, 153)
     if {joint_a_name, joint_b_name} == {"Nose", "Left Eye"}:
-        return (153, 0, 153)
+        colour = (153, 0, 153)
     if {joint_a_name, joint_b_name} == {"Left Eye", "Left Ear"}:
-        return (153, 0, 102)
+        colour = (153, 0, 102)
     if {joint_a_name, joint_b_name} == {"Nose", "Right Eye"}:
-        return (51, 0, 153)
+        colour = (51, 0, 153)
     if {joint_a_name, joint_b_name} == {"Right Eye", "Right Ear"}:
-        return (102, 0, 153)
+        colour = (102, 0, 153)
 
     #Left Arm
     if {joint_a_name, joint_b_name} == {"Neck", "Left Shoulder"}:
-        return (153, 51, 0)
+        colour = (153, 51, 0)
     if {joint_a_name, joint_b_name} == {"Left Shoulder", "Left Elbow"}:
-        return (102, 153, 0)
+        colour = (102, 153, 0)
     if {joint_a_name, joint_b_name} == {"Left Elbow", "Left Wrist"}:
-        return (50, 154, 0)
+        colour = (50, 154, 0)
 
     #Right Arm
     if {joint_a_name, joint_b_name} == {"Neck", "Right Shoulder"}:
-        return (153, 0, 0)
+        colour = (153, 0, 0)
     if {joint_a_name, joint_b_name} == {"Right Shoulder", "Right Elbow"}:
-        return (150, 105, 1)
+        colour = (150, 105, 1)
     if {joint_a_name, joint_b_name} == {"Right Elbow", "Right Wrist"}:
-        return (152, 155, 4)
+        colour = (152, 155, 4)
 
     #Left Leg
     if {joint_a_name, joint_b_name} == {"Neck", "Left Hip"}:
-        return (0, 153, 153)
+        colour = (0, 153, 153)
     if {joint_a_name, joint_b_name} == {"Left Hip", "Left Knee"}:
-        return (0, 102, 153)
+        colour = (0, 102, 153)
     if {joint_a_name, joint_b_name} == {"Left Knee", "Left Ankle"}:
-        return (0, 51, 153)
+        colour = (0, 51, 153)
 
     #Right Leg
     if {joint_a_name, joint_b_name} == {"Neck", "Right Hip"}:
@@ -194,74 +195,19 @@ def get_connection_colours(joint_a_name:str, joint_b_name:str):
     if {joint_a_name, joint_b_name} == {"Right Knee", "Right Ankle"}:
         return (0, 153, 102)
 
-    print(f"Could not find connection colours for {joint_a_name} & {joint_b_name}, returning white")
-    return (255, 255, 255)
-
-def detect_poses(image:np.ndarray, detection_resolution:int=512, detection_padding:str="5%") -> (np.ndarray, np.ndarray, dict):
-    bordered_image = add_equal_image_border(image, detection_padding)
-    height, width = bordered_image.shape[:2]
-
+    if colour == (255, 255, 255):
+        print(f"Could not find connection colours for {joint_a_name} & {joint_b_name}, returning white")
     
-    detection_image = scale_image(bordered_image, detection_resolution)
+    colour = tuple(int(element * multiplier) for element in colour)
 
-    composite_image = bordered_image
-    pose_image = np.zeros(shape=(height, width, 3), dtype=np.uint8)
 
-    joints = {}
+    return colour
 
-    poses = openpose.detect_poses(detection_image)
-    for index, pose in enumerate(poses):
-
-        keypoints = pose.body.keypoints
-
-        #Draw Bones
-        for (k1_index, k2_index), color in zip(LIMB_SEQUENCE, LIMB_SEQUENCE_COLOURS):
-            keypoint1 = keypoints[k1_index - 1]
-            keypoint2 = keypoints[k2_index - 1]
-
-            if keypoint1 is None or keypoint2 is None:
-                continue
-
-            bone_Position_Y = np.array([keypoint1.x, keypoint2.x]) * float(width)
-            bone_Position_X = np.array([keypoint1.y, keypoint2.y]) * float(height)
-            mX = np.mean(bone_Position_X)
-            mY = np.mean(bone_Position_Y)
-            length = ((bone_Position_X[0] - bone_Position_X[1]) ** 2 + (bone_Position_Y[0] - bone_Position_Y[1]) ** 2) ** 0.5
-            angle = math.degrees(math.atan2(bone_Position_X[0] - bone_Position_X[1], bone_Position_Y[0] - bone_Position_Y[1]))
-            polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
-            colour = [int(float(c) * 0.6) for c in color]
-
-            cv2.fillConvexPoly(pose_image, polygon, colour)
-            cv2.fillConvexPoly(composite_image, polygon, colour)
-
-        #Draw Joints
-        for keypoint, color in zip(keypoints, LIMB_SEQUENCE_COLOURS):
-            if keypoint is None:
-                continue
-
-            x, y = keypoint.x, keypoint.y
-            x = int(x * width)
-            y = int(y * height)
-
-            cv2.circle(pose_image, (int(x), int(y)), 4, color, thickness=-1)
-            cv2.circle(composite_image, (int(x), int(y)), 4, color, thickness=-1)
-
-            joint_name = JOINT_NAMES_BY_COLOUR[tuple(color)]
-            joints[f"{index + 1}/{joint_name}"] = (x, y)
-
-    return composite_image, remove_equal_image_border(pose_image, detection_padding), joints
-
-def clear_poses(image:np.ndarray):
-    return image, image, []
-
-def pose_map_select(image:np.ndarray, current_person_index:int, current_joint_name:str, joints:dict, select:gr.SelectData):
+def create_pose_image(image:np.ndarray, joints:dict, detection_padding:str="5%"):
     pose_map:np.ndarray = add_equal_image_border(image, pose_map_border_size)
+    pose_image = np.zeros_like(image)
 
     height, width = pose_map.shape[:2]
-
-    pose_image = np.zeros((height, width, 3), dtype=np.uint8)
-
-    joints[f"{current_person_index}/{current_joint_name}"] = select.index #Set the new position of the current joint
 
     #Draw Bones
     for name, position in joints.items():
@@ -299,5 +245,84 @@ def pose_map_select(image:np.ndarray, current_person_index:int, current_joint_na
 
     #unbordered_pose_map = remove_equal_image_border(pose_map, pose_map_border_size)
     unbordered_pose_image = remove_equal_image_border(pose_image, pose_map_border_size)
+    return pose_map, unbordered_pose_image
+
+def detect_poses(image:np.ndarray, current_person_index, detection_resolution:int=512, detection_padding:str="5%") -> (np.ndarray, np.ndarray, dict):
+    bordered_image = add_equal_image_border(image, detection_padding)
+    height, width = bordered_image.shape[:2]
+
+    detection_image = scale_image(bordered_image, detection_resolution)
+
+    composite_image = bordered_image
+    pose_image = np.zeros(shape=(height, width, 3), dtype=np.uint8)
+
+    joints = {}
+
+    openpose:OpenposeDetector = OpenposeDetector.from_pretrained("lllyasviel/ControlNet")
+    poses = openpose.detect_poses(detection_image)
+    for index, pose in enumerate(poses):
+
+        keypoints = pose.body.keypoints
+
+        #Draw Bones
+        for (k1_index, k2_index), color in zip(LIMB_SEQUENCE, LIMB_SEQUENCE_COLOURS):
+            keypoint1 = keypoints[k1_index - 1]
+            keypoint2 = keypoints[k2_index - 1]
+
+            if keypoint1 is None or keypoint2 is None:
+                continue
+
+            bone_Position_Y = np.array([keypoint1.x, keypoint2.x]) * float(width)
+            bone_Position_X = np.array([keypoint1.y, keypoint2.y]) * float(height)
+            mX = np.mean(bone_Position_X)
+            mY = np.mean(bone_Position_Y)
+            length = ((bone_Position_X[0] - bone_Position_X[1]) ** 2 + (bone_Position_Y[0] - bone_Position_Y[1]) ** 2) ** 0.5
+            angle = math.degrees(math.atan2(bone_Position_X[0] - bone_Position_X[1], bone_Position_Y[0] - bone_Position_Y[1]))
+            polygon = cv2.ellipse2Poly((int(mY), int(mX)), (int(length / 2), stickwidth), int(angle), 0, 360, 1)
+            colour = [int(float(c) * 0.6) for c in color] 
+            composite_colour = tuple(int(element * 1 if (index + 1) == current_person_index else 0.5) for element in colour)
+
+            cv2.fillConvexPoly(pose_image, polygon, colour)
+            cv2.fillConvexPoly(composite_image, polygon, composite_colour)
+
+        #Draw Joints
+        for keypoint, color in zip(keypoints, LIMB_SEQUENCE_COLOURS):
+            if keypoint is None:
+                continue
+
+            colour = tuple(int(element * 1 if (index + 1) == current_person_index else 0.5) for element in color)
+
+            x, y = keypoint.x, keypoint.y
+            x = int(x * width)
+            y = int(y * height)
+
+            cv2.circle(pose_image, (int(x), int(y)), 4, color, thickness=-1)
+            cv2.circle(composite_image, (int(x), int(y)), 4, colour, thickness=-1)
+
+            joint_name = JOINT_NAMES_BY_COLOUR[tuple(color)]
+            joints[f"{index + 1}/{joint_name}"] = (x, y)
+
+    return composite_image, remove_equal_image_border(pose_image, detection_padding), joints
+
+def clear_poses(image:np.ndarray):
+    return image, image, []
+
+def remove_pose(image, current_person_index:int, joints:dict):
+    keys_to_delete = []
+    for key in joints:
+        if key.startswith(str(current_person_index)):
+            keys_to_delete.append(key)
+
+    for key in keys_to_delete:
+        joints.pop(key)
+    
+    pose_map, unbordered_pose_image = create_pose_image(image, joints)
+
+    return pose_map, unbordered_pose_image, joints
+
+def pose_map_select(image:np.ndarray, current_person_index:int, current_joint_name:str, joints:dict, select:gr.SelectData):
+    joints[f"{current_person_index}/{current_joint_name}"] = select.index #Set the new position of the current joint
+
+    pose_map, unbordered_pose_image = create_pose_image(image, joints)
 
     return pose_map, unbordered_pose_image, joints

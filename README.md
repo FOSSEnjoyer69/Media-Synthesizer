@@ -16,9 +16,14 @@ pip install -r requirements.txt
 ```bash
 python3 src/main.py
 ```
+#### SEVERE WARNINGS
+<ol>
+    <li>Stable Cascade currently causes a memory leak causing a system freeze, the memory can be cleared by closeing the program before the system freeze</li>
+</ol>
 
 ### Limitations
 <ol>
   <li>Limited features</li>
-  <li>Only supported Image Inpainting, i am working on more tpyes of image ediiting</li>
+  <li>Only supported Image Inpainting (Stable Diffusion Inpaint) and text2image with Stable Cascade And Flux 1 Dev, i am working on more</li>
+  <li>Flux current only works with low resolutions and on the cpu, current takes 30 Minutes to generate a 256x256 image on a Intel® Core™ i5-10400F (6 Core)</li>
 </ol>
