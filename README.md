@@ -24,6 +24,5 @@ python3 src/main.py
 ### Limitations
 <ol>
   <li>Limited features</li>
-  <li>Only supported Image Inpainting (Stable Diffusion Inpaint) and text2image with Stable Cascade And Flux 1 Dev, i am working on more</li>
-  <li>Flux current only works with low resolutions and on the cpu, current takes 30 Minutes to generate a 256x256 image on a Intel® Core™ i5-10400F (6 Core)</li>
+  <li>Only supported Image Inpainting (Stable Diffusion Inpaint) and text2image with Stable Cascade, i am working on more</li>
 </ol>
