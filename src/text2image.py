@@ -9,9 +9,8 @@ import cv2
 
 from save import get_output_folder
 
-TEXT_2_IMAGE_MODEL_IDS = ["stabilityai/stable-cascade-prior", "black-forest-labs/FLUX.1-dev"]
 STABLE_CASCADE_MODEL_IDS = ["stabilityai/stable-cascade-prior"]
-FLUX_MODEL_IDS = ["black-forest-labs/FLUX.1-dev"]
+TEXT_2_IMAGE_MODEL_IDS = STABLE_CASCADE_MODEL_IDS
 
 def run_text2image(prompt:str, n_prompt:str,
                     model_id,
@@ -23,17 +22,11 @@ def run_text2image(prompt:str, n_prompt:str,
     if seed == -1:
         seed = random.randint(0, 2147483647)
 
-    save_folder_path:str = get_output_folder()
-
-    output:list = []
     if STABLE_CASCADE_MODEL_IDS.__contains__(model_id):
-        output = run_stable_cascade(prompt, n_prompt, width, height, sampling_steps, cfg_scale, seed, iteration_count)
-    elif FLUX_MODEL_IDS.__contains__(model_id):
-        output = run_flux_text2image(prompt, n_prompt, width, height, cfg_scale, sampling_steps, seed, iteration_count, save_folder_path)
+        return run_stable_cascade(prompt, n_prompt, width, height, sampling_steps, cfg_scale, seed, iteration_count)
     else:
-        output = np.zeros((width, height, 3), dtype=np.float16)
+        return np.zeros((width, height, 3), dtype=np.float16)
 
-    return output
 
 def run_stable_cascade(prompt:str, n_prompt:str,
                     width:int=512, height=512,
@@ -86,39 +79,5 @@ def run_stable_cascade(prompt:str, n_prompt:str,
     del decoder
     torch.cuda.empty_cache()
     gc.collect()
-
-    return output_list
-
-def run_flux_text2image(prompt:str, n_prompt:str,
-                        width:int=512, height=512,
-                        cfg_scale:float=3.5, sampling_steps:int=50, seed:int=-1,
-                        iteration_count:int=1, save_folder_path:str=""
-                        ):
-    if seed == -1:
-        seed = random.randint(0, 2147483647)
-
-    pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-dev", torch_dtype=torch.bfloat16, cache_dir="huggingface cache")
-    #pipe.enable_model_cpu_offload() #save some VRAM by offloading the model to CPU. Remove this if you have enough GPU power
-    #pipe.enable_xformers_memory_efficient_attention()
-
-    output_list:list = []
-
-    for i in range(iteration_count):
-        image_seed = seed + i
-        image = pipe(
-            prompt=prompt,
-            negative_prompt=n_prompt,
-            width=width,
-            height=height,
-            guidance_scale=cfg_scale,
-            num_inference_steps=sampling_steps,
-            generator=torch.Generator("cpu").manual_seed(image_seed),
-            output_type="np.array"
-        )[0]
-
-        if save_folder_path != "":
-            cv2.imwrite(f"{save_folder_path}/{i}.jpg", image)
-
-        output_list.append(image)
 
     return output_list

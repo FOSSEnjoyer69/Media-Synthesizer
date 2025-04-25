@@ -56,7 +56,7 @@ def run_image_sam(image:np.ndarray, model_id:str, points:list, labels:list):
     if (points == [] or points is None) or (labels == [] or labels is None):
         return gr.update(value=image), gr.update(value=mask_image)
 
-    predictor = SAM2ImagePredictor.from_pretrained(model_id)
+    predictor = SAM2ImagePredictor.from_pretrained(model_id, cache_dir="huggingface cache")
 
     with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
         predictor.set_image(image)

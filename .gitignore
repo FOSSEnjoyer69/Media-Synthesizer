@@ -19,3 +19,5 @@ Thumbs.db
 
 output/*
 huggingface cache/*
+
+settings/prompts/presets/image inpainting/*

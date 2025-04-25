@@ -16,9 +16,22 @@ import torch
 
 import numpy as np
 from diffusers import  (KDPM2AncestralDiscreteScheduler,
-                        StableDiffusionInpaintPipeline, ControlNetModel, StableDiffusionControlNetInpaintPipeline)
+                        ControlNetModel, StableDiffusionControlNetInpaintPipeline,)
 
 from save import get_output_folder
+
+STABLE_DIFFUSION_INPAINT_MODELS = ["Uminosachi/realisticVisionV51_v51VAE-inpainting", "Lykon/absolute-reality-1.6525-inpainting", "Uminosachi/dreamshaper_8Inpainting", "runwayml/stable-diffusion-inpainting", "stabilityai/stable-diffusion-2-inpainting"]
+IMAGE_INPAINT_MODELS = STABLE_DIFFUSION_INPAINT_MODELS
+
+def run_image_inpaint(input_image:np.ndarray, input_mask, input_pose, 
+                            prompt:str="", n_prompt:str="", 
+                            sampling_steps:int=40, cfg_scale:float=4, seed: int = -1, iteration_count:int=2, 
+                            inpaint_model_id: str = "Uminosachi/realisticVisionV51_v51VAE-inpainting",
+                            lora_model_paths:list=[], lora_strength:float=1,
+                            min_inpaint_resolution:int=512, max_inpaint_resolution:int=1024):
+
+    if inpaint_model_id in STABLE_DIFFUSION_INPAINT_MODELS:
+        return generate_inpaint_images(input_image, input_mask, input_pose, prompt, n_prompt, sampling_steps, cfg_scale, seed, iteration_count, inpaint_model_id, lora_model_paths, lora_strength, min_inpaint_resolution, max_inpaint_resolution)
 
 def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose, 
                             prompt:str="", n_prompt:str="", 
@@ -33,7 +46,6 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
         input_pose = np.zeros_like(input_image)
 
     save_folder_path:str = get_output_folder()
-    inpaint_resolution:int = 1000
 
     #Save Params To File
     params_file_path:str = f"{save_folder_path}/params.txt"
@@ -45,7 +57,6 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
         file.write(f"Seed: {seed}\n")
         file.write(f"Iteration Count: {iteration_count}\n")
         file.write(f"Inpaint Model: {inpaint_model_id}\n")
-        file.write(f"Inpaint Resolution: {inpaint_resolution}\n")
     
     generation_padding:float = 0.5
     image = crop_to_mask(input_image, input_mask, generation_padding, min_resolution=min_inpaint_resolution)
@@ -113,8 +124,6 @@ def generate_inpaint_images(input_image:np.ndarray, input_mask, input_pose,
             
             
         ).images[0]
-
-        #output_image = fix_hands(output_image)
 
         # Save the generated image
         output_image.save(f"{save_folder_path}/{i + 1}:generated_image.jpg")

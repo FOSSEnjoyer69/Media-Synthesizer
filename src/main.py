@@ -4,7 +4,7 @@ import numpy as np
 import gradio as gr
 
 from prompt_presets import get_image_inpaint_preset_file_paths, get_image_inpaint_preset_file_names, load_prompts
-from image_inpainting import generate_inpaint_images
+from image_inpainting import run_image_inpaint as generate_inpaint_images, IMAGE_INPAINT_MODELS
 from image_masking import add_mask, trim_mask, clear_mask, grow_mask, shrink_mask
 from openpose_tools import detect_poses, pose_map_select, JOINT_NAMES, remove_pose
 
@@ -13,7 +13,8 @@ from text2image import run_text2image, TEXT_2_IMAGE_MODEL_IDS
 from sam_tools import get_point_from_gradio_click, run_image_sam, MODELS as SAM_MODELS
 from lora_manager import get_lora_model_names
 
-IMAGE_INPAINT_MODELS = ["Uminosachi/realisticVisionV51_v51VAE-inpainting", "Lykon/absolute-reality-1.6525-inpainting", "Uminosachi/dreamshaper_8Inpainting"]
+IMAGE_INPAINT_PRESET_FILE_NAMES = get_image_inpaint_preset_file_names()
+
 
 with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important; }") as app:
     with gr.Tab("Create"):
@@ -45,16 +46,16 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
 
                                                                 text2image_iteration_count], 
                                                         outputs=[text2image_output_gallery])
-        with gr.Tab(label="Image") as image_tab:
+        with gr.Tab("Image"):
             input_image = gr.Image()
-            with gr.Tab(label="Inpaint") as image_inpaint_tab:
+            with gr.Tab("Inpaint"):
                 with gr.Tab(label="Generate") as image_inpaint_generate_tab:
                     with gr.Row():
                         with gr.Accordion("Prompts"):
                             with gr.Row():
                                 image_inpaint_prompt = gr.TextArea(label="Prompt", elem_id="image_inpaint_prompt")
                                 image_inpaint_n_prompt = gr.TextArea(label="Negative Prompt", elem_id="image_inpaint_n_prompt")
-                            image_inpaint_prompt_preset = gr.Dropdown(label="Prompts Preset", choices=get_image_inpaint_preset_file_names(), value=0)
+                            image_inpaint_prompt_preset = gr.Dropdown(label="Prompts Preset", choices=IMAGE_INPAINT_PRESET_FILE_NAMES, value=IMAGE_INPAINT_PRESET_FILE_NAMES[0])
                             image_inpaint_prompt_preset.change(load_prompts, inputs=[image_inpaint_prompt_preset], outputs=[image_inpaint_prompt, image_inpaint_n_prompt])
                         with gr.Accordion("Loras"):
                             image_inpaint_lora_models = gr.Dropdown(label="Model", choices=get_lora_model_names(), multiselect=True)
@@ -90,7 +91,7 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
                             image_inpaint_clear_sam_points.click(fn=lambda x: (x, [], []), inputs=[input_image], outputs=[image_inpaint_sam_map, image_inpaint_sam_points, image_inpaint_sam_labels])
                     with gr.Row():
                         with gr.Column():
-                            composite_mask_image = gr.Sketchpad(label="Mask Composite", interactive=True)
+                            composite_mask_image = gr.ImageEditor(label="Mask Composite", sources=(), brush=gr.Brush(colors=["#000000"], color_mode="fixed"), interactive=True)
                             with gr.Row():
                                 add_mask_btn = gr.Button("+")
                                 trim_mask_btn = gr.Button("-")
@@ -125,8 +126,20 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
                             detect_poses_btn.click(detect_poses, inputs=[input_image, current_pose_person_index_slider], outputs=[composite_pose_image, pose_image, pose_joints])
                             remove_pose_person_btn.click(remove_pose, inputs=[input_image, current_pose_person_index_slider, pose_joints], outputs=[composite_pose_image, pose_image, pose_joints])
                             composite_pose_image.select(pose_map_select, inputs=[input_image, current_pose_person_index_slider, current_pose_joint, pose_joints], outputs=[composite_pose_image, pose_image, pose_joints])
+            with gr.Tab("Extractor"):
+                image_extractor_selection = gr.Sketchpad(label="Mask Composite", interactive=True)
 
-        input_image.upload(fn=lambda x: (x, x, x), inputs=[input_image], outputs=[input_image, composite_mask_image, image_inpaint_sam_map])
+
+
+        input_image.upload(fn=lambda x: ([gr.update(value=x)]*4), inputs=[input_image], 
+                                                   outputs=[input_image, 
+                                                            
+                                                            #Inpaint
+                                                            composite_mask_image, image_inpaint_sam_map,
+                                                            
+                                                            #Extractor
+                                                            image_extractor_selection
+                                                            ])
         image_inpaint_run_same_btn.click(run_image_sam, inputs=[input_image, image_inpaint_sam_model, image_inpaint_sam_points, image_inpaint_sam_labels], outputs=[composite_mask_image, mask_image])
         
         inpaint_images_btn.click(generate_inpaint_images, inputs=[input_image, mask_image, pose_image, 
@@ -134,7 +147,8 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
                                                                 image_inpaint_sampling_steps, image_inpaint_cfg_scale, image_inpaint_seed, image_inpaint_iteration_count, 
                                                                 image_inpaint_inpaint_model_id, 
                                                                 image_inpaint_lora_models, image_inpaint_lora_strength, 
-                                                                image_inpaint_min_generation_resolution, image_inpaint_max_generation_resolution], 
+                                                                image_inpaint_min_generation_resolution, image_inpaint_max_generation_resolution,
+                                                                ], 
                                                             outputs=[image_inpaint_output_gallery])
     with gr.Tab("Settings"):
         with gr.Tab("Prompts"):
