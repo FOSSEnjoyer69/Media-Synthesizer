@@ -8,7 +8,7 @@ from icecream import ic
 
 from PIL import Image, ImageFilter, ImageDraw
 
-def combine_images(inpaint_input_image, inpaint_image, inpaint_mask) -> Image.Image:
+def combine_images(inpaint_input_image, inpaint_image, inpaint_mask, output_type:str="pil"):
     if isinstance(inpaint_input_image, np.ndarray):
         inpaint_input_image = Image.fromarray(inpaint_input_image, 'RGB')
 
@@ -23,6 +23,9 @@ def combine_images(inpaint_input_image, inpaint_image, inpaint_mask) -> Image.Im
 
     dilate_mask_image = Image.fromarray(cv2.dilate(np.array(inpaint_mask), np.ones((3, 3), dtype=np.uint8), iterations=4))
     output_image = Image.composite(inpaint_image, inpaint_input_image, dilate_mask_image.convert("L").filter(ImageFilter.GaussianBlur(3)))
+
+    if output_type == "numpy":
+        output_image = np.array(output_image)
 
     return output_image
 

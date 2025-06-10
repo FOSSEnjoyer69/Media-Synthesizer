@@ -16,10 +16,15 @@ from image_masking import add_mask, trim_mask, clear_mask, grow_mask, shrink_mas
 from openpose_tools import detect_poses, pose_map_select, JOINT_NAMES, remove_pose, remove_joint
 
 from text2image import run_text2image
-from models import TEXT_2_IMAGE_MODELS, IMAGE_INPAINT_MODELS
+from models import TEXT_2_IMAGE_MODELS, IMAGE_INPAINT_MODELS, STABLE_DIFFUSION_LORA_BASE_MODELS
 
 from sam_tools import get_point_from_gradio_click, run_image_sam, MODELS as SAM_MODELS
+
+#LoRa
 from lora_manager import get_stable_diffusion_1_lora_files
+
+#Paint By Example
+from paint_by_example import run_paint_by_example
 
 IMAGE_INPAINT_PRESET_FILE_NAMES = get_image_inpaint_preset_file_names()
 
@@ -138,15 +143,36 @@ with gr.Blocks(title="Media Synthesizer", css=".app { max-width: 100% !important
                             remove_pose_person_btn.click(remove_pose, inputs=[input_image, current_pose_person_index_slider, pose_joints], outputs=[composite_pose_image, pose_image, pose_joints])
                             remove_pose_joint_btn.click(remove_joint, inputs=[input_image, current_pose_person_index_slider, current_pose_joint, pose_joints], outputs=[composite_pose_image, pose_image, pose_joints])
                             composite_pose_image.select(pose_map_select, inputs=[input_image, current_pose_person_index_slider, current_pose_joint, pose_joints], outputs=[composite_pose_image, pose_image, pose_joints])
-            with gr.Tab("Face Swap"):
-                target_faces = gr.Gallery()
+            with gr.Tab("Paint By Example"):
+                with gr.Row():    
+                    paint_by_example_mask_image = gr.ImageEditor(label="Mask", height=1000, sources=(), brush=gr.Brush(colors=["#000000"], color_mode="fixed"), interactive=True)
+                    paint_by_example_reference_image = gr.Image(label="Reference Image", type="numpy")
 
+                with gr.Accordion("Settings", open=False):
+                    with gr.Row():
+                        paint_by_example_sampling_steps = gr.Slider(label="Sampling Steps", minimum=1, value=50, maximum=100, step=1)
+                        paint_by_example_guidance_scale = gr.Slider(label="Guidance Scale", minimum=0, value=7.5, maximum=10, step=0.1)
+                    with gr.Row():
+                        paint_by_example_seed = gr.Slider(label="Seed", minimum=-1, value=-1, maximum=pow(2, 32), step=1)
+                        paint_by_example_iteration_count = gr.Slider(label="Iteration Count", minimum=1, value=1, maximum=100, step=1)
+                paint_by_example_run_btn = gr.Button("Generate")
+                paint_by_example_output_gallery = gr.Gallery()
 
-        input_image.upload(fn=lambda x: (x,x,x), inputs=[input_image], 
+                paint_by_example_run_btn.click(run_paint_by_example,
+                                                inputs=[input_image, paint_by_example_mask_image, paint_by_example_reference_image, 
+                                                        paint_by_example_sampling_steps, paint_by_example_guidance_scale, 
+                                                        paint_by_example_seed, paint_by_example_iteration_count], 
+                                                outputs=[paint_by_example_output_gallery])
+
+        input_image.upload(fn=lambda x: [x] * 4, inputs=[input_image], 
                                                    outputs=[input_image, 
                                                             
                                                             #Inpaint
-                                                            composite_mask_image, image_inpaint_sam_map
+                                                            composite_mask_image, image_inpaint_sam_map,
+
+                                                            #Paint By Example
+                                                            paint_by_example_mask_image
+
                                                             ])
         image_inpaint_run_same_btn.click(run_image_sam, inputs=[input_image, image_inpaint_sam_model, image_inpaint_sam_points, image_inpaint_sam_labels], outputs=[composite_mask_image, mask_image])
         
