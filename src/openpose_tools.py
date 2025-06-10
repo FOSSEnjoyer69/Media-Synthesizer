@@ -7,7 +7,6 @@ from image_editing import scale_image
 from image_border import add_equal_image_border, remove_equal_image_border
 
 from controlnet_aux import OpenposeDetector
-from controlnet_aux.util import resize_image
 
 stickwidth:int = 4
 
@@ -258,7 +257,7 @@ def detect_poses(image:np.ndarray, current_person_index, detection_resolution:in
 
     joints = {}
 
-    openpose:OpenposeDetector = OpenposeDetector.from_pretrained("lllyasviel/ControlNet")
+    openpose:OpenposeDetector = OpenposeDetector.from_pretrained("lllyasviel/ControlNet", cache_dir="huggingface cache")
     poses = openpose.detect_poses(detection_image)
     for index, pose in enumerate(poses):
 
@@ -316,6 +315,15 @@ def remove_pose(image, current_person_index:int, joints:dict):
     for key in keys_to_delete:
         joints.pop(key)
     
+    pose_map, unbordered_pose_image = create_pose_image(image, joints)
+
+    return pose_map, unbordered_pose_image, joints
+
+def remove_joint(image:np.ndarray, current_person_index:int, current_joint_name:str, joints:dict):
+    joint_key = f"{current_person_index}/{current_joint_name}"
+    if joint_key in joints:
+        joints.pop(joint_key)
+
     pose_map, unbordered_pose_image = create_pose_image(image, joints)
 
     return pose_map, unbordered_pose_image, joints

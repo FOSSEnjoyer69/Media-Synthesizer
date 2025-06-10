@@ -19,5 +19,7 @@ Thumbs.db
 
 output/*
 huggingface cache/*
+Models/Lora/Stable Diffusion 1/*
 
 settings/prompts/presets/image inpainting/*
+settings/huggingface_login.txt

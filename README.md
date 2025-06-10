@@ -26,3 +26,8 @@ python3 src/main.py
   <li>Limited features</li>
   <li>Only supported Image Inpainting (Stable Diffusion Inpaint) and text2image with Stable Cascade, i am working on more</li>
 </ol>
+
+### Known Issues
+<ol>
+  <li>Image Editors not working on Librewolf</li>
+</ol>

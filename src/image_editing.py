@@ -8,17 +8,6 @@ from icecream import ic
 
 from PIL import Image, ImageFilter, ImageDraw
 
-from save import get_output_folder
-
-def set_mask_composite_image(image):
-    if isinstance(image, dict):
-        image = image["background"]
-
-    image = scale_image(image, target_resolution=1024)
-    height, width = image.shape[:2]
-
-    return gr.update(value=image, height=height + int(height * 0.5))
-
 def combine_images(inpaint_input_image, inpaint_image, inpaint_mask) -> Image.Image:
     if isinstance(inpaint_input_image, np.ndarray):
         inpaint_input_image = Image.fromarray(inpaint_input_image, 'RGB')
@@ -37,7 +26,7 @@ def combine_images(inpaint_input_image, inpaint_image, inpaint_mask) -> Image.Im
 
     return output_image
 
-def scale_image(image, target_resolution: int = 1000, allow_upscale: bool = True):
+def scale_image(image, target_resolution: int = 1000, allow_upscale: bool = True, output_type:str="numpy") -> np.ndarray:
     if isinstance(image, Image.Image):
         image = np.array(image).astype(np.uint8)
 
@@ -64,7 +53,7 @@ def scale_image(image, target_resolution: int = 1000, allow_upscale: bool = True
 
     return image
 
-def crop_to_mask(image: np.ndarray, mask: np.ndarray, padding: float = 0.1, min_resolution: int = 512) -> np.ndarray:
+def crop_to_mask(image,mask, padding: float = 0.1, min_resolution: int = 512, output_type:str="numpy"):
     """
     Crops an image based on mask and padding, ensuring a minimum resolution.
 
@@ -77,62 +66,91 @@ def crop_to_mask(image: np.ndarray, mask: np.ndarray, padding: float = 0.1, min_
     Returns:
     numpy image: Cropped image.
     """
+    if isinstance(image, np.ndarray):
+        image = Image.fromarray(image)
+    if isinstance(mask, np.ndarray):
+        mask = Image.fromarray(mask)
 
-    min_resolution = (min_resolution, min_resolution)
+    original_width, original_height = image.size
 
-    # Resize the image to match the mask size if they are different
-    if image.shape[:2] != mask.shape[:2]:
-        image = cv2.resize(image, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_LINEAR)
+    mask_array = np.array(mask)
+    coords = np.column_stack(np.where(mask_array > 0))
 
-    # Ensure the mask is a binary mask (non-zero regions define the crop)
-    non_zero_points = np.argwhere(mask > 0)
+    if coords.size == 0:
+        raise ValueError("Mask does not contain any white (non-zero) regions")
 
-    # Check if the mask is 2D (grayscale) or 3D (color image)
-    if non_zero_points.shape[1] == 3:
-        # For 3D masks (height, width, channels)
-        y_min, x_min = np.min(non_zero_points[:, :2], axis=0)
-        y_max, x_max = np.max(non_zero_points[:, :2], axis=0)
-    else:
-        # For 2D masks (height, width)
-        y_min, x_min = np.min(non_zero_points, axis=0)
-        y_max, x_max = np.max(non_zero_points, axis=0)
+    top_left = coords.min(axis=0)
+    bottom_right = coords.max(axis=0) + 1
 
-    # Compute padding in terms of pixels
-    height, width = image.shape[:2]
-    pad_x = int(padding * (x_max - x_min))
-    pad_y = int(padding * (y_max - y_min))
+    # Initial padded box
+    left = max(0, top_left[1] - padding)
+    top = max(0, top_left[0] - padding)
+    right = min(original_width, bottom_right[1] + padding)
+    bottom = min(original_height, bottom_right[0] + padding)
 
-    # Apply padding and ensure it stays within the image bounds
-    x_min = max(0, x_min - pad_x)
-    y_min = max(0, y_min - pad_y)
-    x_max = min(width, x_max + pad_x)
-    y_max = min(height, y_max + pad_y)
+    width = right - left
+    height = bottom - top
 
-    # Ensure the cropped region meets the minimum resolution
-    crop_width = x_max - x_min
-    crop_height = y_max - y_min
+    # Determine if we need to expand to meet the min_size
+    long_side = max(width, height)
+    if long_side < min_resolution:
+        scale = min_resolution / long_side
+        new_width = int(width * scale)
+        new_height = int(height * scale)
 
-    min_height, min_width = min_resolution
-    if crop_width < min_width:
-        expand_x = (min_width - crop_width) // 2
-        x_min = max(0, x_min - expand_x)
-        x_max = min(width, x_max + expand_x)
-    if crop_height < min_height:
-        expand_y = (min_height - crop_height) // 2
-        y_min = max(0, y_min - expand_y)
-        y_max = min(height, y_max + expand_y)
+        extra_w = new_width - width
+        extra_h = new_height - height
 
-    # Crop the image using the adjusted bounding box
-    cropped_image = image[y_min:y_max, x_min:x_max]
+        left = max(0, left - extra_w // 2)
+        right = min(original_width, right + extra_w - extra_w // 2)
+        top = max(0, top - extra_h // 2)
+        bottom = min(original_height, bottom + extra_h - extra_h // 2)
 
-    return cropped_image
+    bbox = (left, top, right, bottom)
+    cropped_image = image.crop(bbox)
 
-def auto_resize_to_pil(images):
+    metadata = {
+        "bbox": bbox,
+        "original_size": image.size
+    }
+
+    if output_type == "numpy":
+        cropped_image = np.array(cropped_image)
+
+    return cropped_image, metadata
+def overlay_image_using_metadata(
+    original_image,
+    new_crop,
+    metadata
+):
+    if isinstance(original_image, np.ndarray):
+        original_image = Image.fromarray(original_image)
+
+    bbox = metadata["bbox"]  # (left, top, right, bottom)
+    #original_size = original_image.size
+
+    # Ensure original image matches expected size
+    #if original.size != original_size:
+    #    raise ValueError(f"Original image size does not match metadata")
+
+    # Resize new_crop to match the bbox dimensions (if needed)
+    expected_width = int(bbox[2] - bbox[0])
+    expected_height = int(bbox[3] - bbox[1])
+    if new_crop.size != (expected_width, expected_height):
+        new_crop = new_crop.resize((expected_width, expected_height), Image.Resampling.BILINEAR)
+
+    # Paste the new image onto the original
+    original_image.paste(new_crop, (int(bbox[0]), int(bbox[1])))
+
+    return original_image
+
+def auto_resize_to_pil(images, output_type="pil"):
     outputs = []
     for image in images:
         if isinstance(image, np.ndarray):
             image = Image.fromarray(image)
 
+        if isinstance(image, Image.Image):
             width, height = image.size
             new_height = (height // 8) * 8
             new_width = (width // 8) * 8
@@ -149,49 +167,21 @@ def auto_resize_to_pil(images):
                 if resize_height != new_height or resize_width != new_width:
                     image = transforms.functional.center_crop(image, (new_height, new_width))
 
+            if output_type == "numpy":
+                image = np.array(image).astype(np.uint8)
+
             outputs.append(image)
         else:
             raise Exception(f"image of type {type(image)} is not supported, supported types are numpy")
     return outputs
 
-def find_image_in_large_image(large_image: np.ndarray, cropped_image: np.ndarray):
-    """
-    Finds the coordinates of the cropped image within the large image.
-    
-    Args:
-        large_image (np.ndarray): The large image as a NumPy array.
-        cropped_image (np.ndarray): The cropped image as a NumPy array.
-
-    Returns:
-        Tuple of top-left and bottom-right coordinates of the found region.
-    """
-    # Convert images to grayscale for matching (optional)
-    large_image_gray = cv2.cvtColor(large_image, cv2.COLOR_BGR2GRAY)
-    cropped_image_gray = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2GRAY)
-
-    # Perform template matching
-    result = cv2.matchTemplate(large_image_gray, cropped_image_gray, cv2.TM_CCOEFF_NORMED)
-
-    # Get the best match position
-    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-
-    # The top-left corner of the matched area in the large image
-    top_left = max_loc
-    # The size of the cropped image (height and width)
-    h, w = cropped_image_gray.shape[:2]
-    # The bottom-right corner of the matched area
-    bottom_right = (top_left[0] + w, top_left[1] + h)
-
-    # Return the coordinates of the top-left and bottom-right corners
-    return top_left, bottom_right
-
-def paste_image(large_image: np.ndarray, image_to_paste: np.ndarray, top_left: tuple):
+def paste_image(large_image, image_to_paste, top_left:tuple):
     """
     Pastes the image_to_paste onto the large_image at the specified coordinates.
 
     Args:
-        large_image (np.ndarray): The large image as a NumPy array.
-        image_to_paste (np.ndarray): The image to be pasted as a NumPy array.
+        large_image: The large image as a NumPy array.
+        image_to_paste: The image to be pasted as a NumPy array.
         top_left (tuple): The coordinates of the top-left corner where the image will be pasted.
 
     Returns:
@@ -200,21 +190,10 @@ def paste_image(large_image: np.ndarray, image_to_paste: np.ndarray, top_left: t
     if isinstance(image_to_paste, Image.Image):
         image_to_paste = np.array(image_to_paste)
 
-    # Get the dimensions of the image to paste
     h, w = image_to_paste.shape[:2]
-
-    # Extract the coordinates
-    x, y = top_left
-
-    # Ensure the image to paste fits within the large image
-    if large_image.shape[0] < y + h or large_image.shape[1] < x + w:
-        raise ValueError("Image to paste is too large for the target location in the large image.")
-
-    # Paste the image (copy the image to paste into the region of interest)
-    large_image[y:y+h, x:x+w] = image_to_paste
-
-    # Return the modified large image
-    return large_image
+    overlay_image = large_image.copy()
+    overlay_image[top_left[1]:top_left[1]+h, top_left[0]:top_left[0]+w] = image_to_paste
+    return overlay_image
 
 
 def create_borderd_image(image, outpaint_up:int, outpaint_down:int, outpaint_left:int, outpaint_right:int, overlap:int = 10):
